@@ -12,5 +12,16 @@ services:
     volumes:
       - mariadb_data:/var/lib/mysql
 
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: local_phpmyadmin
+    environment:
+      PMA_HOST: mariadb
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - '8080:80'
+    depends_on:
+      - mariadb
+
 volumes:
   mariadb_data:
