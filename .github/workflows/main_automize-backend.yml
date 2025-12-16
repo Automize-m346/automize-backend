@@ -23,6 +23,11 @@ jobs:
         with:
           node-version: '24.x'
 
+      - name: Configure npm registry
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
+
       - name: npm install, build, and test
         run: |
           npm install
