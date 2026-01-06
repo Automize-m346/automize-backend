@@ -51,24 +51,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-
+      
       - name: Login to Azure
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_BCB34EB362CB4EEC9F92FBAFF951006F }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_DDFF5AD1D4EA45BDA22A3CED5010F75B }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3176CDCBBFAF4B538716C6D436C16D57 }}
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Apply Drizzle migrations to Azure MySQL
-        run: npx drizzle-kit push
-        env:
-          DB_HOST: ${{ secrets.AZURE_DB_HOST }}
-          DB_USER: ${{ secrets.AZURE_DB_USER }}
-          DB_PASS: ${{ secrets.AZURE_DB_PASS }}
-          DB_NAME: ${{ secrets.AZURE_DB_NAME }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
