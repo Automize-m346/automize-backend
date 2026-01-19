@@ -23,6 +23,9 @@ EXPOSE 80
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY package*.json ./
+COPY --from=build /app/drizzle.config.ts ./
+COPY --from=build /app/src/db/schema ./src/db/schema
+COPY --from=build /app/drizzle ./drizzle
 
 # optional: run migrations at container startup if RUN_MIGRATIONS env var is set
-CMD if [ "$RUN_MIGRATIONS" = "1" ]; then npx drizzle-kit migrate --apply --schema ./src/db/schema --url "mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"; fi && node dist/main.js
+CMD if [ "$RUN_MIGRATIONS" = "1" ]; then npm run migrate; fi && node dist/main.js
