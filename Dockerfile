@@ -16,6 +16,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Make the runtime port explicit for container platforms
+EXPOSE 80
+
 # copy built artifacts and node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules

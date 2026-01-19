@@ -55,9 +55,29 @@ import 'dotenv/config';
           }
         }
 
-        const connection = await mysql.createConnection(connectionOptions);
+        // Try to connect with retries because the DB may not be ready yet
+        const maxAttempts = 8;
+        let attempt = 0;
+        let lastErr: any = null;
 
-        return drizzle(connection);
+        while (attempt < maxAttempts) {
+          try {
+            const connection = await mysql.createConnection(connectionOptions);
+            return drizzle(connection);
+          } catch (err: any) {
+            lastErr = err;
+            attempt += 1;
+            const backoffMs = Math.min(1000 * 2 ** attempt, 30000);
+            console.warn(
+              `DB connection attempt ${attempt} failed, retrying in ${backoffMs}ms:`,
+              err?.message || err,
+            );
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise((r) => setTimeout(r, backoffMs));
+          }
+        }
+
+        throw lastErr || new Error('Could not connect to database');
       },
     },
   ],
