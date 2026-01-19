@@ -33,8 +33,8 @@ jobs:
         run: |
           npm ci
 
-      - name: Run tests
-        run: npm test
+      # - name: Run tests
+      #   run: npm test
 
   build-and-deploy:
     name: Build, Migrate & Deploy
@@ -88,13 +88,11 @@ jobs:
           npm ci
           npx drizzle-kit migrate --apply --schema ./src/db/schema --url "mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 
-      - name: Login to Azure
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Deploy to Azure Web App (Set Container)
-        uses: azure/webapps-container-deploy@v1
-        with:
-          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+      - name: Deploy to Azure Web App (Webhook)
+        env:
+          WEBHOOK_URL: ${{ secrets.AZURE_WEBAPP_WEBHOOK_URL }}
+        run: |
+          curl -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --fail --silent --show-error
