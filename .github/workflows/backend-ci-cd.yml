@@ -120,17 +120,30 @@ jobs:
           DB_REQUIRE_TLS: ${{ secrets.DB_REQUIRE_TLS }}
         run: |
           set -euo pipefail
-          # Build DATABASE_URL from individual secrets (keeps it out of logs)
-          DB_URL="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-          if [ "${DB_REQUIRE_TLS:-}" = "true" ]; then
-            echo "Appending TLS requirement to connection string"
-            DB_URL="${DB_URL}?sslaccept=strict"
-          fi
-          export DATABASE_URL="$DB_URL"
+          # Build base connection string from individual secrets (do NOT print it)
+          DB_URL_BASE="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
           npm ci
           npx prisma generate
-          # Deploy migrations (idempotent for already-applied migrations)
-          npx prisma migrate deploy
+          if [ "${DB_REQUIRE_TLS:-}" != "true" ]; then
+            export DATABASE_URL="$DB_URL_BASE"
+            echo "DB_REQUIRE_TLS not set; attempting non-TLS connection"
+            npx prisma migrate deploy
+            exit $?
+          fi
+          echo "DB_REQUIRE_TLS=true; attempting TLS connection options (no secrets will be printed)"
+          TLS_OPTS=("?sslaccept=strict" "?sslmode=require" "?ssl=true&rejectUnauthorized=false")
+          for opt in "${TLS_OPTS[@]}"; do
+            export DATABASE_URL="${DB_URL_BASE}${opt}"
+            echo "Trying TLS option: $opt"
+            if npx prisma migrate deploy; then
+              echo "Migrations applied successfully with option: $opt"
+              exit 0
+            else
+              echo "Attempt with $opt failed; trying next..."
+            fi
+          done
+          echo "All TLS attempts failed. Ensure the DB accepts TLS with one of the tested options or update the workflow to use the correct params." >&2
+          exit 1
 
       - name: Deploy to Azure Web App (Webhook)
         env:
