@@ -21,20 +21,15 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: |
-          npm ci
+      - run: npm ci
 
-      # - name: Run tests
-      #   run: npm test
+      # - run: npm test
 
   build-and-deploy:
     name: Build, Migrate & Deploy
@@ -47,11 +42,9 @@ jobs:
       packages: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -67,110 +60,17 @@ jobs:
         with:
           context: .
           push: true
-          build-args: |
-            DB_HOST=${{ secrets.DB_HOST }}
-            DB_PORT=${{ secrets.DB_PORT }}
-            DB_USER=${{ secrets.DB_USER }}
-            DB_PASS=${{ secrets.DB_PASS }}
-            DB_NAME=${{ secrets.DB_NAME }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: 'Preflight: Validate DB secrets and connectivity'
-        env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASS: ${{ secrets.DB_PASS }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for v in DB_HOST DB_PORT DB_USER DB_PASS DB_NAME; do
-            if [ -z "${!v:-}" ]; then
-              missing+=("$v")
-            fi
-          done
-          if [ ${#missing[@]} -ne 0 ]; then
-            echo "Missing required DB secrets: ${missing[*]}" >&2
-            exit 1
-          fi
-          echo "All DB secrets present. Checking TCP connectivity to $DB_HOST:$DB_PORT..."
-          # Try to connect to the DB host:port a few times
-          tries=0
-          until nc -z -w5 "$DB_HOST" "$DB_PORT" || [ $tries -ge 5 ]; do
-            tries=$((tries+1))
-            echo "Waiting for $DB_HOST:$DB_PORT (attempt $tries)..."
-            sleep 2
-          done
-          if ! nc -z -w5 "$DB_HOST" "$DB_PORT"; then
-            echo "Unable to reach $DB_HOST:$DB_PORT after $tries attempts" >&2
-            exit 1
-          fi
-          echo "Connectivity OK."
-
       - name: Run Prisma migrations
         env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASS: ${{ secrets.DB_PASS }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_REQUIRE_TLS: ${{ secrets.DB_REQUIRE_TLS }}
-          DB_CA_PEM: ${{ secrets.DB_CA_PEM }}
+          DATABASE_URL: mysql://${{ secrets.DB_USER }}:${{ secrets.DB_PASS }}@${{ secrets.DB_HOST }}:${{ secrets.DB_PORT }}/${{ secrets.DB_NAME }}
         run: |
-          set -euo pipefail
-          # Build base connection string from individual secrets (do NOT print it)
-          DB_URL_BASE="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
           npm ci
           npx prisma generate
-          # If a CA pem is provided (for Azure/self-signed), write it and set NODE_EXTRA_CA_CERTS
-          if [ -n "${DB_CA_PEM:-}" ]; then
-            echo "Writing DB CA to /tmp/db-ca.pem (not printed)"
-            printf '%s' "$DB_CA_PEM" > /tmp/db-ca.pem
-            export NODE_EXTRA_CA_CERTS=/tmp/db-ca.pem
-          fi
-
-          # Try non-TLS first unless DB_REQUIRE_TLS explicitly requires TLS
-          if [ "${DB_REQUIRE_TLS:-}" != "true" ]; then
-            export DATABASE_URL="$DB_URL_BASE"
-            echo "DB_REQUIRE_TLS not set; attempting non-TLS connection"
-            set +e
-            OUTPUT=$(npx prisma migrate deploy 2>&1)
-            CODE=$?
-            set -e
-            if [ $CODE -eq 0 ]; then
-              echo "Migrations applied successfully with non-TLS"
-              exit 0
-            fi
-            echo "$OUTPUT" | sed -n '1,200p'
-            # Detect MySQL server error about insecure transport
-            if echo "$OUTPUT" | grep -qi "require_secure_transport" || echo "$OUTPUT" | grep -qi "insecure transport"; then
-              echo "Detected server requires secure transport; will attempt TLS connection options"
-            else
-              echo "Non-TLS migration failed with a non-TLS error; failing early." >&2
-              echo "$OUTPUT" >&2
-              exit $CODE
-            fi
-          else
-            echo "DB_REQUIRE_TLS=true; attempting TLS connection options (no secrets will be printed)"
-          fi
-
-          # Try TLS connection options
-          TLS_OPTS=("?sslaccept=strict" "?sslmode=require" "?ssl=true&rejectUnauthorized=false")
-          for opt in "${TLS_OPTS[@]}"; do
-            export DATABASE_URL="${DB_URL_BASE}${opt}"
-            echo "Trying TLS option: $opt"
-            if npx prisma migrate deploy; then
-              echo "Migrations applied successfully with option: $opt"
-              exit 0
-            else
-              echo "Attempt with $opt failed; trying next..."
-            fi
-          done
-          echo "All TLS attempts failed. Ensure the DB accepts TLS with one of the tested options or update the workflow to use the correct params." >&2
-          exit 1
+          npx prisma migrate deploy
 
       - name: Deploy to Azure Web App (Webhook)
         env:
