@@ -7,12 +7,11 @@ RUN npm ci
 
 # copy sources
 COPY . .
+# generate prisma client during build so TypeScript can import @prisma/client
+RUN npm run prisma:generate
 
 # build
 RUN npm run build
-
-# generate prisma client during build so runtime has generated client
-RUN npm run prisma:generate || true
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
@@ -26,9 +25,6 @@ EXPOSE 80
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY package*.json ./
-COPY --from=build /app/drizzle.config.ts ./
-COPY --from=build /app/src/db/schema ./src/db/schema
-COPY --from=build /app/drizzle ./drizzle
 
 # copy prisma schema & generated client into runtime image
 COPY --from=build /app/prisma ./prisma
