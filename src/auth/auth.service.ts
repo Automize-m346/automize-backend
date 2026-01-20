@@ -4,57 +4,38 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { users } from '../db/schema/users';
-import { eq } from 'drizzle-orm';
+import { User } from '@prisma/client';
+import { PrismaService } from '../db/prisma.service';
 import { hash, compare } from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import type { MySql2Database } from 'drizzle-orm/mysql2';
 
 @Injectable()
 export class AuthService {
   constructor(
-    @Inject('DB') private readonly db: MySql2Database,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
 
   async register(username: string, email: string, password: string) {
-    const existingUser = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.email, email));
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
 
-    if (existingUser.length > 0) {
+    if (existingUser) {
       throw new BadRequestException('Email already exists');
     }
 
     const hashedPassword = await hash(password, 10);
 
-    const result = await this.db
-      .insert(users)
-      .values({ username, email, password: hashedPassword })
-      .execute();
-
-    const userId = Array.isArray(result)
-      ? result[0]?.insertId
-      : (result as any)?.insertId;
-
-    if (!userId) {
-      throw new Error('Failed to insert user');
-    }
-
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+    const user = await this.prisma.user.create({
+      data: { username, email, password: hashedPassword },
+    });
 
     return { id: user.id, username: user.username, email: user.email };
   }
 
   async validateUser(email: string, password: string) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.email, email));
+    const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -75,10 +56,7 @@ export class AuthService {
   }
 
   async getMe(userId: number) {
-    const [user] = await this.db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user) {
       throw new UnauthorizedException();

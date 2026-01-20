@@ -22,8 +22,30 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = Number(process.env.PORT ?? 4000);
-  await app.listen(port, '0.0.0.0');
-  console.log(`Server listening on port ${port}`);
+  const basePort = Number(process.env.PORT ?? 4000);
+  const maxAttempts = 5;
+  let lastError: any = null;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    const port = basePort + i;
+    try {
+      await app.listen(port, '0.0.0.0');
+      console.log(`Server listening on port ${port}`);
+      lastError = null;
+      break;
+    } catch (err: any) {
+      lastError = err;
+      if (err?.code === 'EADDRINUSE') {
+        console.warn(`Port ${port} is in use, trying ${basePort + i + 1}...`);
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  if (lastError) {
+    console.error(`Failed to bind to ports ${basePort}-${basePort + maxAttempts - 1}`);
+    throw lastError;
+  }
 }
 bootstrap();

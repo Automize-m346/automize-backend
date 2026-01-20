@@ -11,6 +11,9 @@ COPY . .
 # build
 RUN npm run build
 
+# generate prisma client during build so runtime has generated client
+RUN npm run prisma:generate || true
+
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
@@ -27,5 +30,9 @@ COPY --from=build /app/drizzle.config.ts ./
 COPY --from=build /app/src/db/schema ./src/db/schema
 COPY --from=build /app/drizzle ./drizzle
 
+# copy prisma schema & generated client into runtime image
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+
 # optional: run migrations at container startup if RUN_MIGRATIONS env var is set
-CMD if [ "$RUN_MIGRATIONS" = "1" ]; then npm run migrate; fi && node dist/main.js
+CMD if [ "$RUN_MIGRATIONS" = "1" ]; then npm run prisma:migrate-prod; fi && node dist/main.js
