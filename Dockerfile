@@ -30,5 +30,9 @@ COPY package*.json ./
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
-# optional: run migrations at container startup if RUN_MIGRATIONS env var is set
-CMD if [ "$RUN_MIGRATIONS" = "1" ]; then npm run prisma:migrate-prod; fi && node dist/main.js
+# copy a small entrypoint to improve runtime diagnostics
+COPY ./scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
+# entrypoint will optionally run migrations then start the Node app
+CMD ["sh", "./docker-entrypoint.sh"]
