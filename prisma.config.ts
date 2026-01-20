@@ -3,13 +3,16 @@
 import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
 
-const host = process.env.DB_HOST ?? 'localhost';
-const user = process.env.DB_USER ?? 'root';
-const password = process.env.DB_PASS ?? 'password';
-const dbName = process.env.DB_NAME ?? 'mydb_test';
-const port = Number(process.env.DB_PORT ?? 3306);
-
-const databaseUrl = `mysql://${user}:${password}@${host}:${port}/${dbName}`;
+const databaseUrl =
+  process.env.DATABASE_URL ??
+  (() => {
+    const host = process.env.DB_HOST ?? 'localhost';
+    const user = process.env.DB_USER ?? 'root';
+    const password = process.env.DB_PASS ?? 'password';
+    const dbName = process.env.DB_NAME ?? 'mydb_test';
+    const port = Number(process.env.DB_PORT ?? 3306);
+    return `mysql://${user}:${password}@${host}:${port}/${dbName}`;
+  })();
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',

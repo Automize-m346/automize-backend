@@ -77,6 +77,39 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
+      - name: 'Preflight: Validate DB secrets and connectivity'
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASS: ${{ secrets.DB_PASS }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for v in DB_HOST DB_PORT DB_USER DB_PASS DB_NAME; do
+            if [ -z "${!v:-}" ]; then
+              missing+=("$v")
+            fi
+          done
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "Missing required DB secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+          echo "All DB secrets present. Checking TCP connectivity to $DB_HOST:$DB_PORT..."
+          # Try to connect to the DB host:port a few times
+          tries=0
+          until nc -z -w5 "$DB_HOST" "$DB_PORT" || [ $tries -ge 5 ]; do
+            tries=$((tries+1))
+            echo "Waiting for $DB_HOST:$DB_PORT (attempt $tries)..."
+            sleep 2
+          done
+          if ! nc -z -w5 "$DB_HOST" "$DB_PORT"; then
+            echo "Unable to reach $DB_HOST:$DB_PORT after $tries attempts" >&2
+            exit 1
+          fi
+          echo "Connectivity OK."
+
       - name: Run Prisma migrations
         env:
           DATABASE_URL: 'mysql://${{ secrets.DB_USER }}:${{ secrets.DB_PASS }}@${{ secrets.DB_HOST }}:${{ secrets.DB_PORT }}/${{ secrets.DB_NAME }}'
