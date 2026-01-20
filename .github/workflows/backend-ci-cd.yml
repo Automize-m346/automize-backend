@@ -124,13 +124,32 @@ jobs:
           DB_URL_BASE="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
           npm ci
           npx prisma generate
+          # Try non-TLS first unless DB_REQUIRE_TLS explicitly requires TLS
           if [ "${DB_REQUIRE_TLS:-}" != "true" ]; then
             export DATABASE_URL="$DB_URL_BASE"
             echo "DB_REQUIRE_TLS not set; attempting non-TLS connection"
-            npx prisma migrate deploy
-            exit $?
+            set +e
+            OUTPUT=$(npx prisma migrate deploy 2>&1)
+            CODE=$?
+            set -e
+            if [ $CODE -eq 0 ]; then
+              echo "Migrations applied successfully with non-TLS"
+              exit 0
+            fi
+            echo "$OUTPUT" | sed -n '1,200p'
+            # Detect MySQL server error about insecure transport
+            if echo "$OUTPUT" | grep -qi "require_secure_transport" || echo "$OUTPUT" | grep -qi "insecure transport"; then
+              echo "Detected server requires secure transport; will attempt TLS connection options"
+            else
+              echo "Non-TLS migration failed with a non-TLS error; failing early." >&2
+              echo "$OUTPUT" >&2
+              exit $CODE
+            fi
+          else
+            echo "DB_REQUIRE_TLS=true; attempting TLS connection options (no secrets will be printed)"
           fi
-          echo "DB_REQUIRE_TLS=true; attempting TLS connection options (no secrets will be printed)"
+
+          # Try TLS connection options
           TLS_OPTS=("?sslaccept=strict" "?sslmode=require" "?ssl=true&rejectUnauthorized=false")
           for opt in "${TLS_OPTS[@]}"; do
             export DATABASE_URL="${DB_URL_BASE}${opt}"
