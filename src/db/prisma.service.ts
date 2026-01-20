@@ -23,7 +23,32 @@ export class PrismaService
   }
 
   async onModuleInit() {
-    await this.$connect();
+    const maxAttempts = 5;
+    const delayMs = 2000;
+    let lastErr: any = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await this.$connect();
+        console.log('Connected to the database');
+        lastErr = null;
+        break;
+      } catch (err: any) {
+        lastErr = err;
+        console.warn(
+          `Database connection attempt ${attempt} failed: ${String(err)}`,
+        );
+        if (attempt < maxAttempts) {
+          await new Promise((res) => setTimeout(res, delayMs));
+        }
+      }
+    }
+
+    if (lastErr) {
+      console.error(
+        'Could not connect to the database after multiple attempts. Continuing without DB connection.',
+      );
+    }
   }
 
   async onModuleDestroy() {
