@@ -25,7 +25,8 @@
     "prisma:migrate-test": "prisma migrate reset --force && prisma migrate deploy",
     "prisma:migrate-ci": "npm run prisma:migrate-test",
     "prisma:migrate-prod": "prisma migrate deploy",
-    "prisma:reset": "prisma migrate reset && prisma generate"
+    "prisma:reset": "prisma migrate reset && prisma generate",
+    "docker-start": "npm run prisma:migrate-prod && node dist/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
