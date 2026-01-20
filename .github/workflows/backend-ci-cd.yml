@@ -118,12 +118,20 @@ jobs:
           DB_PASS: ${{ secrets.DB_PASS }}
           DB_NAME: ${{ secrets.DB_NAME }}
           DB_REQUIRE_TLS: ${{ secrets.DB_REQUIRE_TLS }}
+          DB_CA_PEM: ${{ secrets.DB_CA_PEM }}
         run: |
           set -euo pipefail
           # Build base connection string from individual secrets (do NOT print it)
           DB_URL_BASE="mysql://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
           npm ci
           npx prisma generate
+          # If a CA pem is provided (for Azure/self-signed), write it and set NODE_EXTRA_CA_CERTS
+          if [ -n "${DB_CA_PEM:-}" ]; then
+            echo "Writing DB CA to /tmp/db-ca.pem (not printed)"
+            printf '%s' "$DB_CA_PEM" > /tmp/db-ca.pem
+            export NODE_EXTRA_CA_CERTS=/tmp/db-ca.pem
+          fi
+
           # Try non-TLS first unless DB_REQUIRE_TLS explicitly requires TLS
           if [ "${DB_REQUIRE_TLS:-}" != "true" ]; then
             export DATABASE_URL="$DB_URL_BASE"
